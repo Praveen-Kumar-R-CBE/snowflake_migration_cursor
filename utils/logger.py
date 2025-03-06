@@ -34,4 +34,7 @@ class DatabaseLogger:
         self.logger.error(f"[{database_type}] Error: {error_message}")
     
     def log_info(self, database_type, message):
-        self.logger.info(f"[{database_type}] {message}") 
+        self.logger.info(f"[{database_type}] {message}")
+    
+    def log_warning(self, database_type, message):
+        self.logger.warning(f"[{database_type}] Warning: {message}") 

@@ -4,7 +4,7 @@ import pandas as pd
 from sqlalchemy import create_engine
 from utils.logger import DatabaseLogger
 
-class DatabaseConnection:
+class MySQLConnection:
     def __init__(self, host="localhost", user="user", 
                  password="password", database="db"):
         self.host = host

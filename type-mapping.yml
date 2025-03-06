@@ -1,0 +1,310 @@
+bigint:
+  kudu: bigint
+  impala: bigint
+  parquet: bigint
+  avro: bigint
+  snowflake: bigint
+tinyint:
+  kudu: int
+  impala: int
+  parquet: int
+  avro: int
+  mysql: tinyint
+  snowflake: tinyint
+decimal:
+  kudu: string
+  impala: decimal
+  parquet: decimal
+  avro: string
+  snowflake: decimal
+int:
+  kudu: int
+  impala: int
+  mysql: int
+  parquet: int
+  avro: int
+  snowflake: int
+mediumint:
+  kudu: int
+  impala: int
+  mysql: int
+  parquet: int
+  avro: int
+  snowflake: int
+int2:
+  snowflake: number
+int4:
+  snowflake: number
+int8:
+  snowflake: number
+number:
+  kudu: string
+  impala: decimal
+  parquet: decimal
+  avro: string
+  snowflake: number
+numeric:
+  kudu: string
+  impala: string
+  parquet: string
+  avro: string
+  snowflake: string
+double:
+  kudu: double
+  impala: double
+  parquet: double
+  avro: string
+  snowflake: double
+real:
+  kudu: string
+  impala: decimal
+  parquet: string
+  avro: string
+  snowflake: real
+float:
+  kudu: float
+  impala: float
+  parquet: float
+  avro: float
+  snowflake: float
+float4:
+  snowflake: float4
+float8:
+  snowflake: float8
+long:
+  kudu: bigint
+  parquet: bigint
+  impala: bigint
+  avro: bigint
+  snowflake: bigint
+smallint:
+  kudu: int
+  impala: int
+  parquet: int
+  avro: int
+  snowflake: smallint
+integer:
+  kudu: int
+  impala: int
+  parquet: int
+  avro: int
+  snowflake: int
+short:
+  kudu: int
+  impala: int
+  parquet: int
+  avro: int
+  snowflake: int
+date:
+  kudu: bigint
+  impala: bigint
+  parquet: timestamp
+  avro: bigint
+  snowflake: datetime
+year:
+  snowflake: year
+time:
+  kudu: bigint
+  impala: timestamp
+  parquet: timestamp
+  avro: bigint
+  snowflake: timestamp_ntz
+timestamp:
+  kudu: bigint
+  impala: timestamp
+  parquet: timestamp
+  avro: bigint
+  snowflake: timestamp_ntz
+timestamp(0):
+  kudu: bigint
+  impala: timestamp
+  parquet: timestamp
+  avro: bigint
+  snowflake: timestamp_ntz
+timestamp(3):
+  kudu: bigint
+  impala: timestamp
+  parquet: timestamp
+  avro: bigint
+  snowflake: timestamp_ntz
+timestamp(6):
+  kudu: bigint
+  impala: timestamp
+  parquet: timestamp
+  avro: bigint
+  snowflake: timestamp_ntz
+timestamp(6) with time zone:
+  kudu: bigint
+  impala: timestamp
+  parquet: timestamp
+  avro: bigint
+  snowflake: timestamp_ntz
+timestamp(7):
+  kudu: bigint
+  impala: timestamp
+  parquet: timestamp
+  avro: bigint
+  snowflake: timestamp_ntz
+timestamp(8):
+  kudu: bigint
+  impala: timestamp
+  parquet: timestamp
+  avro: bigint
+  snowflake: timestamp_ntz
+timestamp(9):
+  kudu: bigint
+  impala: timestamp
+  parquet: timestamp
+  avro: bigint
+  snowflake: timestamp_ntz
+datetime:
+  kudu: bigint
+  impala: timestamp
+  parquet: timestamp
+  avro: bigint
+  snowflake: timestamp_ntz
+time with timezone:
+  kudu: bigint
+  impala: timestamp
+  parquet: timestamp
+  avro: bigint
+  snowflake: timestamp_tz
+timestamp with timezone:
+  kudu: bigint
+  impala: timestamp
+  parquet: timestamp
+  avro: bigint
+  snowflake: timestamp_tz
+string:
+  kudu: string
+  impala: string
+  parquet: string
+  avro: string
+  snowflake: string
+blob:
+  kudu: string
+  impala: string
+  parquet: string
+  avro: string
+  snowflake: string
+clob:
+  kudu: string
+  impala: string
+  parquet: string
+  avro: string
+  snowflake: string
+nclob:
+  kudu: string
+  impala: string
+  parquet: string
+  avro: string
+  snowflake: string
+varchar:
+  kudu: string
+  impala: string
+  parquet: string
+  avro: string
+  mysql: varchar
+  snowflake: varchar
+text:
+  kudu: string
+  impala: string
+  parquet: string
+  avro: string
+  snowflake: string
+char:
+  kudu: string
+  impala: string
+  parquet: string
+  avro: string
+  snowflake: char
+character:
+  snowflake: char
+bpchar:
+  snowflake: char
+longvarchar:
+  kudu: string
+  impala: string
+  parquet: string
+  avro: string
+  snowflake: string
+binary:
+  kudu: string
+  impala: string
+  parquet: string
+  avro: string
+  snowflake: binary
+varbinary:
+  kudu: string
+  impala: string
+  parquet: string
+  avro: string
+  snowflake: varbinary
+longvarbinary:
+  kudu: string
+  impala: string
+  parquet: string
+  avro: string
+  snowflake: varbinary
+nchar:
+  kudu: string
+  impala: string
+  parquet: string
+  avro: string
+  snowflake: char
+nvarchar:
+  kudu: string
+  impala: string
+  parquet: string
+  avro: string
+  snowflake: varchar
+longnvarchar:
+  kudu: string
+  impala: string
+  parquet: string
+  avro: string
+  snowflake: string
+varchar2:
+  kudu: string
+  impala: string
+  parquet: string
+  avro: string
+  snowflake: varchar
+bit:
+  kudu: boolean
+  impala: boolean
+  parquet: boolean
+  avro: boolean
+  snowflake: boolean
+boolean:
+  kudu: boolean
+  impala: boolean
+  parquet: boolean
+  avro: boolean
+  snowflake: boolean
+bool:
+  snowflake: boolean
+enum:
+  kudu: string
+  impala: string
+  parquet: string
+  avro: string
+  snowflake: string
+raw:
+  kudu: string
+  impala: string
+  parquet: string
+  avro: string
+  snowflake: string
+long raw:
+  kudu: string
+  impala: string
+  parquet: string
+  avro: string
+  snowflake: string
+nvarchar2:
+  kudu: string
+  impala: string
+  parquet: string
+  avro: string
+  snowflake: string

@@ -1,31 +1,22 @@
 import streamlit as st
-from database import DatabaseConnection
+from mysql_db import MySQLConnection
 from snowflake_db import SnowflakeConnection
 import json
 import os
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from database_factory import DatabaseFactory
 
-def load_mysql_credentials():
+def load_credentials(db_type):
+    """Load credentials for specified database type"""
     try:
-        with open('creds-mysql.json', 'r') as f:
-            return json.load(f)['databases']
-    except FileNotFoundError:
-        st.error("creds-mysql.json file not found!")
-        return {}
-    except json.JSONDecodeError:
-        st.error("Invalid JSON format in creds-mysql.json!")
-        return {}
-
-def load_snowflake_credentials():
-    try:
-        with open('creds-snowflake.json', 'r') as f:
+        with open(f'creds-{db_type}.json', 'r') as f:
             return json.load(f)['connections']
     except FileNotFoundError:
-        st.error("creds-snowflake.json file not found!")
+        st.error(f"creds-{db_type}.json file not found!")
         return {}
     except json.JSONDecodeError:
-        st.error("Invalid JSON format in creds-snowflake.json!")
+        st.error(f"Invalid JSON format in creds-{db_type}.json!")
         return {}
 
 def display_table_selection(tables):
@@ -98,13 +89,6 @@ def display_table_selection(tables):
                     )
                     selected_tables[table] = load_type
     
-    # Show summary of selection
-    if selected_tables:
-        st.markdown("---")
-        st.markdown("#### Selected Tables:")
-        for table, load_type in selected_tables.items():
-            st.markdown(f"- **{table}** ({load_type})")
-    
     return selected_tables
 
 def migrate_table(table, load_type, mysql_conn, snowflake_conn, force_load=False):
@@ -118,7 +102,6 @@ def migrate_table(table, load_type, mysql_conn, snowflake_conn, force_load=False
             if not columns_match and not force_load:
                 return table, False, f"Schema mismatch for {table}:\n{diff_message}"
             elif not columns_match and force_load:
-                # Log the mismatch but continue with migration
                 snowflake_conn.logger.log_info("Migration", 
                     f"Proceeding with migration despite column mismatch for {table}:\n{diff_message}")
             
@@ -126,8 +109,8 @@ def migrate_table(table, load_type, mysql_conn, snowflake_conn, force_load=False
             if load_type == "Truncate and Load":
                 snowflake_conn.truncate_table(table)
                 
-            # Create table if it doesn't exist
-            if snowflake_conn.create_table_from_df(table, df):
+            # Create table if it doesn't exist - pass mysql_conn for type mapping
+            if snowflake_conn.create_table_from_df(table, df, mysql_conn):
                 # Load data
                 if snowflake_conn.load_data(table, df):
                     return table, True, f"Successfully migrated {table} ({load_type})"
@@ -139,69 +122,83 @@ def migrate_table(table, load_type, mysql_conn, snowflake_conn, force_load=False
         return table, False, f"Error migrating {table}: {str(e)}"
 
 def main():
-    st.title("MySQL > Snowflake Migration Tool")
+    st.title("Database Migration Tool")
     
     # Database connection settings
     st.sidebar.header("Database Connections")
     
-    # MySQL Connection
-    st.sidebar.subheader("MySQL Connection")
-    mysql_creds = load_mysql_credentials()
-    if mysql_creds:
-        selected_db = st.sidebar.selectbox(
-            "Select MySQL Configuration",
-            options=list(mysql_creds.keys())
+    # Source Database Selection
+    st.sidebar.subheader("Source Database")
+    source_type = st.sidebar.selectbox(
+        "Select Source Database Type",
+        options=["MySQL", "SQL Server"]
+    )
+    
+    # Load credentials for selected source database
+    source_creds = load_credentials(source_type.lower().replace(" ", ""))
+    if source_creds:
+        selected_source = st.sidebar.selectbox(
+            f"Select {source_type} Configuration",
+            options=list(source_creds.keys()),
+            key="source_config"
         )
-        if selected_db:
-            db_config = mysql_creds[selected_db]
+        
+        if selected_source:
+            source_config = source_creds[selected_source]
             
             # Display the selected configuration (hide password)
-            st.sidebar.text(f"Host: {db_config['host']}")
-            st.sidebar.text(f"User: {db_config['user']}")
-            st.sidebar.text(f"Database: {db_config['database']}")
+            for key, value in source_config.items():
+                if key != 'password':
+                    st.sidebar.text(f"{key}: {value}")
             
-            # Connect button for MySQL
-            if st.sidebar.button("Connect to MySQL"):
-                db = DatabaseConnection(**db_config)
-                if db.connect():
-                    st.session_state['db'] = db
-                    st.success("Connected to MySQL database successfully!")
+            # Connect button for source
+            if st.sidebar.button(f"Connect to {source_type}"):
+                source_db = DatabaseFactory.create_connection(
+                    source_type.lower().replace(" ", ""),  # Normalize the type string
+                    **source_config
+                )
+                if source_db.connect():
+                    st.session_state['source_db'] = source_db
+                    st.success(f"Connected to {source_type} successfully!")
                 else:
-                    st.error("Failed to connect to MySQL database")
-    else:
-        st.sidebar.error("No MySQL configurations found!")
-
-    # Snowflake Connection in Sidebar
-    st.sidebar.subheader("Snowflake Connection")
-    sf_creds = load_snowflake_credentials()
-    if sf_creds:
-        selected_sf = st.sidebar.selectbox(
-            "Select Snowflake Configuration",
-            options=list(sf_creds.keys())
+                    st.error(f"Failed to connect to {source_type}")
+    
+    # Target Database Selection
+    st.sidebar.subheader("Target Database")
+    target_type = st.sidebar.selectbox(
+        "Select Target Database Type",
+        options=["Snowflake"]  # Can add more target databases here
+    )
+    
+    # Load Snowflake credentials
+    target_creds = load_credentials(target_type.lower())
+    if target_creds:
+        selected_target = st.sidebar.selectbox(
+            f"Select {target_type} Configuration",
+            options=list(target_creds.keys()),
+            key="target_config"
         )
-        if selected_sf:
-            sf_config = sf_creds[selected_sf]
+        
+        if selected_target:
+            target_config = target_creds[selected_target]
             
             # Display the selected configuration (hide password)
-            st.sidebar.text(f"Account: {sf_config['account']}")
-            st.sidebar.text(f"Database: {sf_config['database']}")
-            st.sidebar.text(f"Schema: {sf_config['schema']}")
-            st.sidebar.text(f"Warehouse: {sf_config['warehouse']}")
+            for key, value in target_config.items():
+                if key != 'password':
+                    st.sidebar.text(f"{key}: {value}")
             
-            # Connect button for Snowflake
-            if st.sidebar.button("Connect to Snowflake"):
-                sf = SnowflakeConnection(**sf_config)
-                if sf.connect():
-                    st.session_state['sf'] = sf
-                    st.success("Connected to Snowflake successfully!")
+            # Connect button for target
+            if st.sidebar.button(f"Connect to {target_type}"):
+                target_db = DatabaseFactory.create_connection(target_type, **target_config)
+                if target_db.connect():
+                    st.session_state['target_db'] = target_db
+                    st.success(f"Connected to {target_type} successfully!")
                 else:
-                    st.error("Failed to connect to Snowflake")
-    else:
-        st.sidebar.error("No Snowflake configurations found!")
+                    st.error(f"Failed to connect to {target_type}")
     
     # Main content area - Table selection and migration
-    if 'db' in st.session_state:
-        tables = st.session_state['db'].get_tables()
+    if 'source_db' in st.session_state:
+        tables = st.session_state['source_db'].get_tables()
         
         if tables:
             # Display table selection with checkboxes and load type options
@@ -209,20 +206,19 @@ def main():
             
             # Show selected tables count and migration button
             if selected_tables:
-                st.write(f"Selected {len(selected_tables)} tables")
-                
                 # Configuration for parallel processing - only show if multiple tables
                 max_workers = 1  # Default for single table
                 if len(selected_tables) > 1:
-                    max_workers = st.slider(
-                        "Maximum parallel migrations", 
-                        min_value=1, 
-                        max_value=min(len(selected_tables), 10), 
-                        value=min(len(selected_tables), 3)
+                    max_parallel = min(len(selected_tables), 4)  # Maximum of 4 or number of tables
+                    max_workers = st.number_input(
+                        "Maximum parallel migrations",
+                        min_value=1,
+                        max_value=max_parallel,
+                        value=min(max_parallel, 3)  # Default to 3 or less if fewer tables
                     )
                 
                 # Show migration button only if Snowflake is connected
-                if 'sf' in st.session_state:
+                if 'target_db' in st.session_state:
                     # Add force load option
                     force_load = st.checkbox("Force load tables (ignore column mismatches)", 
                                           help="Enable this to proceed with migration even if table structures don't match")
@@ -238,8 +234,8 @@ def main():
                                     migrate_table, 
                                     table, 
                                     load_type,
-                                    st.session_state['db'],
-                                    st.session_state['sf'],
+                                    st.session_state['source_db'],
+                                    st.session_state['target_db'],
                                     force_load
                                 ): table 
                                 for table, load_type in selected_tables.items()
@@ -280,10 +276,10 @@ def main():
 
     # Close connections when the app is done
     def cleanup():
-        if 'db' in st.session_state:
-            st.session_state['db'].close()
-        if 'sf' in st.session_state:
-            st.session_state['sf'].close()
+        if 'source_db' in st.session_state:
+            st.session_state['source_db'].close()
+        if 'target_db' in st.session_state:
+            st.session_state['target_db'].close()
 
     # Register the cleanup function
     st.session_state['cleanup'] = cleanup

@@ -5,6 +5,7 @@ from utils.logger import DatabaseLogger
 import os
 import tempfile
 from datetime import datetime
+import yaml  # Add this import at the top with other imports
 
 class SnowflakeConnection:
     def __init__(self, account, user, password, warehouse, database, schema):
@@ -19,6 +20,7 @@ class SnowflakeConnection:
         self.stage_name = 'MYSQL_MIGRATION_STAGE'
         self.chunk_size = 100000  # Number of rows per file
         self.data_dir = 'data_files'  # Directory to store split files
+        self.type_mapping = self._load_type_mapping()
         
     def connect(self):
         try:
@@ -53,15 +55,32 @@ class SnowflakeConnection:
         except Exception as e:
             self.logger.log_error("Snowflake", f"Error creating stage: {str(e)}")
             
-    def create_table_from_df(self, table_name, df):
+    def create_table_from_df(self, table_name, df, mysql_conn):
+        """Create table in Snowflake using MySQL types from type-mapping.yml"""
         try:
             table_name = table_name.upper()
             
+            # Get MySQL column types
+            mysql_types = self.get_mysql_column_types(mysql_conn, table_name)
+            if not mysql_types:
+                raise ValueError(f"Could not get MySQL types for table {table_name}")
+            
+            # Log column mapping process
+            self.logger.log_info("Type Mapping", f"Starting column mapping for table '{table_name}':")
+            
             columns = []
-            for col, dtype in df.dtypes.items():
-                sf_type = self._map_dtype_to_snowflake(dtype)
-                columns.append(f'"{col.upper()}" {sf_type}')
+            for col in df.columns:
+                col_upper = col.upper()
                 
+                if col_upper not in mysql_types:
+                    raise ValueError(f"Column {col_upper} not found in MySQL table schema")
+                    
+                mysql_type = mysql_types[col_upper]
+                sf_type = self.get_snowflake_type(mysql_type)
+                
+                # Only log if there's a type mapping issue (logging happens in get_snowflake_type)
+                columns.append(f'"{col_upper}" {sf_type}')
+            
             create_table_sql = f"""
             CREATE TABLE IF NOT EXISTS "{table_name}" (
                 {', '.join(columns)}
@@ -71,6 +90,12 @@ class SnowflakeConnection:
             self.logger.log_query("Snowflake", create_table_sql)
             cursor = self.connection.cursor()
             cursor.execute(create_table_sql)
+            
+            # Log successful table creation with final schema
+            self.logger.log_info("Snowflake", f"Successfully created table '{table_name}' with schema:")
+            for col in columns:
+                self.logger.log_info("Snowflake", f"  - {col}")
+            
             return True
         except Exception as e:
             self.logger.log_error("Snowflake", f"Error creating table {table_name}: {str(e)}")
@@ -165,17 +190,38 @@ class SnowflakeConnection:
             self.logger.log_error("Snowflake", f"Error truncating table {table_name}: {str(e)}")
             return False
             
-    def _map_dtype_to_snowflake(self, dtype):
-        dtype_str = str(dtype)
-        if 'int' in dtype_str:
-            return 'NUMBER'
-        elif 'float' in dtype_str:
-            return 'FLOAT'
-        elif 'datetime' in dtype_str:
-            return 'TIMESTAMP'
+    def _load_type_mapping(self):
+        """Load type mapping configuration from YAML file"""
+        try:
+            with open('type-mapping.yml', 'r') as f:
+                self.type_mapping = yaml.safe_load(f)
+                
+                # Log loaded mappings
+                self.logger.log_info("Type Mapping", "Loaded type mappings from YAML:")
+                for base_type, mappings in self.type_mapping.items():
+                    if 'snowflake' in mappings:
+                        self.logger.log_info("Type Mapping", 
+                            f"  Base type: {base_type} -> Snowflake: {mappings['snowflake']}")
+                
+                return self.type_mapping
+        except Exception as e:
+            self.logger.log_error("Snowflake", f"Error loading type mapping: {str(e)}")
+            return {}
+
+    def get_snowflake_type(self, mysql_type):
+        """Get Snowflake type from type mapping based on MySQL type"""
+        base_type = mysql_type.split('(')[0].lower()
+        
+        # Search for the base type in the mapping
+        if base_type in self.type_mapping:
+            snowflake_type = self.type_mapping[base_type]['snowflake']
+            return snowflake_type
         else:
+            # Only log when type mapping is not found
+            self.logger.log_warning("Type Mapping", 
+                f"No mapping found for type: {base_type}, defaulting to VARCHAR")
             return 'VARCHAR'
-            
+
     def close(self):
         if self.connection:
             self.connection.close()
@@ -207,10 +253,15 @@ class SnowflakeConnection:
         """Compare columns between DataFrame and existing Snowflake table"""
         try:
             table_name = table_name.upper()
-            sf_columns = self.get_table_columns(table_name)
             
+            # First check if table exists
+            if not self.table_exists(table_name):
+                return True, None  # Table doesn't exist, no comparison needed
+            
+            # Get Snowflake columns
+            sf_columns = self.get_table_columns(table_name)
             if sf_columns is None:
-                return True, None  # Table doesn't exist, proceed with creation
+                return False, "Error getting Snowflake table columns"
             
             # Get column names only (ignore data types)
             df_columns = set(col.upper() for col in df.columns)
@@ -237,4 +288,50 @@ class SnowflakeConnection:
             
         except Exception as e:
             self.logger.log_error("Snowflake", f"Error comparing columns for table {table_name}: {str(e)}")
-            return False, str(e) 
+            return False, str(e)
+
+    def get_mysql_column_types(self, mysql_conn, table_name):
+        """Get actual MySQL column types"""
+        try:
+            query = f"""
+            SELECT COLUMN_NAME, DATA_TYPE
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE UPPER(TABLE_NAME) = '{table_name}'
+            AND TABLE_CATALOG = '{mysql_conn.database}'
+            ORDER BY ORDINAL_POSITION
+            """
+            # Log the query being executed
+            self.logger.log_info("MySQL", f"Executing query to get column types:\n{query}")
+            
+            cursor = mysql_conn.connection.cursor()
+            cursor.execute(query)
+            
+            # Process results
+            column_types = {}
+            for row in cursor.fetchall():
+                col_name, data_type = row
+                column_types[col_name.upper()] = data_type.lower()
+            
+            return column_types
+            
+        except Exception as e:
+            self.logger.log_error("MySQL", f"Error getting column types: {str(e)}")
+            return {}
+
+    def table_exists(self, table_name):
+        """Check if table exists in Snowflake"""
+        try:
+            table_name = table_name.upper()
+            cursor = self.connection.cursor()
+            query = f"""
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_NAME = '{table_name}'
+            AND TABLE_SCHEMA = '{self.schema}'
+            """
+            cursor.execute(query)
+            count = cursor.fetchone()[0]
+            return count > 0
+        except Exception as e:
+            self.logger.log_error("Snowflake", f"Error checking table existence: {str(e)}")
+            return False 
